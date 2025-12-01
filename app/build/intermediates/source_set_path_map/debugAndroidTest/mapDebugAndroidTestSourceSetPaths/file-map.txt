@@ -1,0 +1,7 @@
+com.example.cutTheLand.test.app-core-1.7.0-0 C:\Users\김상찬\.gradle\caches\8.13\transforms\33c536d8dbe300e50e1a6c75ec97b59b\transformed\core-1.7.0\res
+com.example.cutTheLand.test.app-tracing-1.2.0-1 C:\Users\김상찬\.gradle\caches\8.13\transforms\8481df4c593a3c80421712a1e0de61d7\transformed\tracing-1.2.0\res
+com.example.cutTheLand.test.app-androidTest-2 E:\projects\cut-the-land\app\build\generated\res\resValues\androidTest\debug
+com.example.cutTheLand.test.app-updated_navigation_xml-3 E:\projects\cut-the-land\app\build\generated\updated_navigation_xml\debugAndroidTest
+com.example.cutTheLand.test.app-mergeDebugAndroidTestResources-4 E:\projects\cut-the-land\app\build\intermediates\incremental\debugAndroidTest\mergeDebugAndroidTestResources\merged.dir
+com.example.cutTheLand.test.app-mergeDebugAndroidTestResources-5 E:\projects\cut-the-land\app\build\intermediates\incremental\debugAndroidTest\mergeDebugAndroidTestResources\stripped.dir
+com.example.cutTheLand.test.app-debugAndroidTest-6 E:\projects\cut-the-land\app\build\intermediates\merged_res\debugAndroidTest\mergeDebugAndroidTestResources
