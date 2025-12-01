@@ -1,0 +1,39 @@
+[테마 별 타일셋]
+: 아래 정해진 타일, 오브젝트로 구성
+: 타일셋 png를 불러와서 canvas.drawImage()로 출력.
+
+[JS Canvas 구현 시 고려사항]
+: ctx.imageSmoothingEnabled = false 설정 필수
+: 타일맵 저장 방식은 직접 배열로 구성 요망.
+: png는 Preload 필수
+
+[위치-테마 중 숲 테마 이미지 위치]
+\public\assets\theme\forest
+
+[타일 종류] - 각 타일은 48*48px
+tiles_forest_grass : 전체 타일 중 생성비율 50%
+tiles_forest_dirt : 전체 타일 중 생성비율-30%
+tiles_forest_water : 전체 타일 중 생성비율-20%
+ : grass + dirt, dirt + water는 서로 조합되어 있기도 함.(아래 명명규칙 확인)
+
+[오브젝트 종류]
+obj01 ~ obj12.png
+: 랜덤으로 랜덤 위치에 생성.
+: 무조건 하나 이상은 생성되어야 함.
+: 각각 2 ~ 5개씩 생성.
+
+[파일 명명 규칙]
+tiles_forest... : 숲 테마의 타일
+tiles_forest_grass... : 숲 테마의 잔디 타일
+tiles_forest_grass1.png : 숲 테마의 잔디 타일 타입1(2번까지 있음.)
+tiles_forest_grass_dirt_t.png : 숲 테마의 잔디 타일 - 잔디타일의 상단에 흙타일이 있음.
+tiles_forest_grass_dirt_tl.png : 숲 테마의 잔디 타일 - 잔디타일의 상단 좌측에 흙타일이 있음.
+tiles_forest_grass_dirt_tr.png : 숲 테마의 잔디 타일 - 잔디타일의 상단 우측에 흙타일이 있음.
+tiles_forest_grass_dirt_l.png : 숲 테마의 잔디 타일 - 잔디타일의 좌측에 흙타일이 있음.
+tiles_forest_grass_dirt_r.png : 숲 테마의 잔디 타일 - 잔디타일의 우측에 흙타일이 있음.
+tiles_forest_grass_dirt_b.png : 숲 테마의 잔디 타일 - 잔디타일의 하단에 흙타일이 있음.
+tiles_forest_grass_dirt_bl.png : 숲 테마의 잔디 타일 - 잔디타일의 하단 좌측에 흙타일이 있음.
+tiles_forest_grass_dirt_br.png : 숲 테마의 잔디 타일 - 잔디타일의 하단 우측에 흙타일이 있음.
+
+ex) water 타일의 하단 좌측에 흙 타일이 있음 : tiles_forest_water_dirt_bl.png
+

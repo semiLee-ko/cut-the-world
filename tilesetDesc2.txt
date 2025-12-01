@@ -1,0 +1,100 @@
+1. “게임 해상도(가상 해상도)”를 하나 정해
+
+예를 들면:
+
+타일 크기: 48×48
+
+가로 20칸 × 세로 12칸 쓰겠다 → 가상 해상도 = 960×576
+
+이 해상도는 게임 내부 좌표계야.
+실제 디바이스 해상도랑 1:1일 필요 없어.
+
+2. 캔버스는 이 가상 해상도 기준으로 그려
+const tileSize = 48;
+const mapWidth = 20;
+const mapHeight = 12;
+
+const gameWidth = tileSize * mapWidth;  // 960
+const gameHeight = tileSize * mapHeight; // 576
+
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+// 내부 논리 해상도
+canvas.width = gameWidth;
+canvas.height = gameHeight;
+
+// 픽셀 아트 뭉개지지 않게
+ctx.imageSmoothingEnabled = false;
+
+
+여기까지가 **“내부적으로 960×576 픽셀짜리 게임 화면을 만든다”**는 느낌.
+
+3. 그 다음에 “디바이스 해상도”에 맞게 CSS로 키우는 거야
+
+예를 들어 폰이 2400×1080 해상도라면:
+
+canvas {
+  width: 100vw;   /* 가로 화면 꽉 */
+  height: auto;   /* 비율 유지하면서 확대 */
+  image-rendering: pixelated; /* 픽셀아트 선명하게 */
+}
+
+
+이러면:
+
+내부적으로는 960×576에서 타일 렌더링
+
+화면에는 확대된 상태로 보이게 됨
+
+중요한 건: imageSmoothingEnabled = false + image-rendering: pixelated
+
+→ 이렇게 하면 어떤 디바이스 해상도든 같은 타일셋으로 커버 가능해.
+
+4. “조합”은 이렇게 생각하면 돼
+
+타일맵 데이터 (2차원 배열)
+
+const map = [
+  [0,0,1,1,2,2,...],
+  ...
+];
+
+
+루프 돌면서:
+
+for (let y = 0; y < mapHeight; y++) {
+  for (let x = 0; x < mapWidth; x++) {
+    const tileId = map[y][x];
+    const img = tileset[tileId]; // grassA, dirtB, waterA 등
+
+    ctx.drawImage(img, x * tileSize, y * tileSize);
+  }
+}
+
+
+→ 이게 “조합해서 한 화면을 만든다”는 동작.
+해상도에 따라 이미지를 새로 만드는 게 아니라,
+같은 타일셋 + 같은 맵데이터를 “배율만 다르게” 보여주는 거야.
+
+5. 패드/폰/가로/세로 다 대응하려면?
+
+보통 이런 식으로 해:
+
+내부 게임 해상도는 고정 (ex. 960×540, 1280×720 등)
+
+실제 디바이스 비율이랑 안 맞으면:
+
+위아래 여백(레터박스)
+
+좌우 여백
+중 하나 선택
+
+그 여백은 그냥 검은색 or UI 배경 깔면 됨
+
+이건 나중에 “카메라 + 스케일 관리” 구조 잡을 때 같이 짜줘도 돼.
+
+요약하면:
+
+✅ 지금처럼 타일/오브젝트 PNG만 잘 만들어두면
+디바이스 해상도는 “CSS + 배율”로 해결하는 구조가 제일 깔끔해!
