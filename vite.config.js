@@ -6,4 +6,7 @@ export default defineConfig({
         host: true
     },
     base: './', // Ensure assets load correctly in any subdirectory (e.g. GitHub Pages)
+    build: {
+        outDir: 'docs', // Output to docs folder for GitHub Pages
+    }
 });
