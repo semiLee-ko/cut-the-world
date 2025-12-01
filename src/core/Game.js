@@ -47,11 +47,8 @@ export class Game {
         });
 
         document.getElementById('continue-btn').addEventListener('click', () => {
-            // Use setTimeout to allow the UI to update before the alert blocks
-            setTimeout(() => {
-                alert('광고를 시청했습니다! (가상)');
-                this.revivePlayer();
-            }, 10);
+            // TODO: 나중에 앱인토스 광고 시청 로직 추가
+            this.revivePlayer();
         });
     }
 
