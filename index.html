@@ -4,7 +4,8 @@
 <head>
   <meta charset="UTF-8" />
   <link rel="icon" type="image/svg+xml" href="vite.svg" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="viewport"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
   <title>Cut the Land</title>
   <style>
     * {
@@ -20,8 +21,12 @@
       display: flex;
       align-items: center;
       justify-content: center;
-      min-height: 100vh;
+min-height: 100vh;
       color: #fff;
+      padding-top: env(safe-area-inset-top);
+      padding-bottom: env(safe-area-inset-bottom);
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
     }
 
     #game-container {
@@ -400,26 +405,26 @@
       </div>
 
       <div id="stage-transition" style="display: none;">
-        <div class="message">다음 스테이지로 이동중...</div>
+        <div class="message">?�음 ?�테?��?�??�동�?..</div>
       </div>
 
       <div id="game-over-popup" style="display: none;">
         <div class="popup-content toss-style">
           <h2>GAME OVER</h2>
-          <p>아쉽게 실패했어요.</p>
+          <p>?�쉽�??�패?�어??</p>
           <div class="button-group">
             <button id="continue-btn" class="btn-toss btn-primary">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <polygon points="5 3 19 12 5 21 5 3" />
               </svg>
-              광고보고 이어하기
+              광고보고 ?�어?�기
             </button>
             <button id="restart-btn" class="btn-toss btn-secondary">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                 <path d="M23 4v6h-6M1 20v-6h6" />
                 <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
               </svg>
-              처음부터 다시하기
+              처음부???�시?�기
             </button>
           </div>
         </div>
