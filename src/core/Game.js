@@ -257,7 +257,9 @@ export class Game {
         }
 
         if (playerState === 'FILL') {
-            this.mapSystem.fillAreas(this.monsters);
+            // 현재 trail만 OWNED로 변환하도록 trail 정보 전달
+            console.log(`🎮 Calling fillAreas with ${this.monsters.length} monsters`);
+            this.mapSystem.fillAreas(this.monsters, this.player.lastTrail);
 
             // Remove monsters that are now in OWNED area
             this.monsters = this.monsters.filter(monster => {
@@ -360,17 +362,29 @@ export class Game {
             }
         }
 
-        // Move Monsters away if too close
+        // Move Monsters away if too close OR in OWNED area
         for (const monster of this.monsters) {
             const dist = Math.hypot(monster.x - centerX, monster.y - centerY);
-            if (dist < 200) {
+            const monsterCell = this.mapSystem.getCell(monster.x, monster.y);
+
+            if (dist < 200 || monsterCell === CONSTANTS.CELL_TYPE.OWNED) {
                 let mx, my;
+                let attempts = 0;
                 do {
                     mx = Math.random() * this.mapSystem.width;
                     my = Math.random() * this.mapSystem.height;
-                } while (Math.hypot(mx - centerX, my - centerY) < 200);
-                monster.x = mx;
-                monster.y = my;
+                    const cell = this.mapSystem.getCell(mx, my);
+                    attempts++;
+                    // UNOWNED 영역이고 중앙에서 충분히 떨어진 곳
+                } while ((Math.hypot(mx - centerX, my - centerY) < 200 ||
+                    this.mapSystem.getCell(mx, my) === CONSTANTS.CELL_TYPE.OWNED) &&
+                    attempts < 50);
+
+                if (attempts < 50) {
+                    monster.x = mx;
+                    monster.y = my;
+                    console.log(`  Moved monster to UNOWNED area at (${mx.toFixed(1)}, ${my.toFixed(1)})`);
+                }
             }
         }
 

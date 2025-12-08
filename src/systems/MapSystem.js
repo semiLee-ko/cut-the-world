@@ -193,10 +193,16 @@ export class MapSystem {
                     const area = [];
                     const stack = [{ x, y }];
                     visited[y][x] = true;
+                    let touchesBorder = false; // 맵 경계에 닿는지 체크
 
                     while (stack.length > 0) {
                         const p = stack.pop();
                         area.push(p);
+
+                        // 맵 경계 체크
+                        if (p.x === 0 || p.x === this.cols - 1 || p.y === 0 || p.y === this.rows - 1) {
+                            touchesBorder = true;
+                        }
 
                         const neighbors = [
                             { x: p.x + 1, y: p.y }, { x: p.x - 1, y: p.y },
@@ -210,39 +216,58 @@ export class MapSystem {
                             }
                         }
                     }
-                    areas.push(area);
+
+                    // 맵 경계에 닿지 않은 영역만 추가
+                    if (!touchesBorder) {
+                        areas.push(area);
+                    } else {
+                        console.log(`  ⚠️ Skipping border area (${area.length} cells)`);
+                    }
                 }
             }
         }
         return areas;
     }
 
-    fillAreas(monsters) {
+    fillAreas(monsters, currentTrail = []) {
+        console.log('🎯 fillAreas called with currentTrail:', currentTrail);
+
+        // 1. 현재 trail을 먼저 OWNED로 변환 (경계 확정)
+        for (const point of currentTrail) {
+            const gx = Math.floor(point.x / CONSTANTS.GRID_SIZE);
+            const gy = Math.floor(point.y / CONSTANTS.GRID_SIZE);
+            if (this.isValid(gx, gy) && this.grid[gy][gx] === CONSTANTS.CELL_TYPE.TRAIL) {
+                this.grid[gy][gx] = CONSTANTS.CELL_TYPE.OWNED;
+            }
+        }
+
+        // 2. 경계가 확정된 후 빈 영역 찾기
         const areas = this.findEmptyAreas();
+        console.log(`  Found ${areas.length} empty areas`);
         let filledCount = 0;
 
-        if (areas.length === 0) return 0;
+        if (areas.length === 0) {
+            // 3. 남은 TRAIL도 모두 OWNED로 변환
+            for (let y = 0; y < this.rows; y++) {
+                for (let x = 0; x < this.cols; x++) {
+                    if (this.grid[y][x] === CONSTANTS.CELL_TYPE.TRAIL) {
+                        this.grid[y][x] = CONSTANTS.CELL_TYPE.OWNED;
+                    }
+                }
+            }
+            return 0;
+        }
 
-        // 1. Calculate size of each area
-        const areasWithSize = areas.map(area => ({
-            points: area,
-            size: area.length
-        }));
-
-        // 2. Sort by size descending (Largest first)
-        areasWithSize.sort((a, b) => b.size - a.size);
-
-        // 3. Keep the largest area (Index 0), Fill all others
-        // We start from index 1 to fill smaller areas
-        for (let i = 1; i < areasWithSize.length; i++) {
-            const areaToFill = areasWithSize[i].points;
-            for (const p of areaToFill) {
-                this.grid[p.y][p.x] = CONSTANTS.CELL_TYPE.OWNED;
+        // 4. 모든 영역 채우기 (몬스터 여부 무시)
+        for (const area of areas) {
+            console.log(`  Filling area (${area.length} cells)`);
+            for (const cell of area) {
+                this.grid[cell.y][cell.x] = CONSTANTS.CELL_TYPE.OWNED;
                 filledCount++;
             }
         }
 
-        // 4. Convert TRAIL to OWNED
+        // 5. 남은 TRAIL도 모두 OWNED로 변환
         for (let y = 0; y < this.rows; y++) {
             for (let x = 0; x < this.cols; x++) {
                 if (this.grid[y][x] === CONSTANTS.CELL_TYPE.TRAIL) {

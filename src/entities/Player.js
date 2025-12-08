@@ -85,11 +85,19 @@ export class Player {
                 this.isDrawing = false;
                 this.x = nextX;
                 this.y = nextY;
+
+                // 현재 trail 복사본 저장 (Game.js에서 fillAreas에 전달용)
+                this.lastTrail = [...this.trail];
+                console.log('✅ Player FILL - lastTrail saved:', this.lastTrail.length, 'points');
+                this.trail = []; // trail 초기화
+
                 return 'FILL';
             }
 
             if (nextCell === CONSTANTS.CELL_TYPE.UNOWNED) {
                 mapSystem.setCell(nextX, nextY, CONSTANTS.CELL_TYPE.TRAIL);
+                // trail에 현재 위치 저장
+                this.trail.push({ x: nextX, y: nextY });
             }
         }
 

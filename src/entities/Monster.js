@@ -4,7 +4,7 @@ export class Monster {
     constructor(x, y, scale = 1.0) {
         this.x = x;
         this.y = y;
-        this.radius = 12 * scale;
+        this.radius = 8 * scale; // 충돌 판정 축소 (12 → 8)
         this.scale = scale;
         this.speed = CONSTANTS.MONSTER_SPEED;
 

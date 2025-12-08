@@ -4,7 +4,7 @@ export class Boss {
     constructor(x, y) {
         this.x = x;
         this.y = y;
-        this.radius = 20; // Slightly larger than normal monsters
+        this.radius = 24; // 충돌 판정 확대 (20 → 24)
         this.speed = 80; // Slower than normal monsters
         this.angle = Math.random() * Math.PI * 2;
 
