@@ -1,7 +1,13 @@
-import './style.css';
-import { Game } from './core/Game';
+import { initializeBedrock } from './bedrock.js';
+import { Game } from './core/Game.js';
 
-// Initialize game when DOM is ready
-document.addEventListener('DOMContentLoaded', () => {
-  new Game();
-});
+// 앱 초기화
+async function init() {
+  // Bedrock SDK 초기화
+  await initializeBedrock();
+
+  // 게임 시작
+  const game = new Game();
+}
+
+init();

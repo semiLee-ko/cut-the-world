@@ -6,6 +6,7 @@ import { StageManager } from '../systems/StageManager';
 import { Player } from '../entities/Player';
 import { Monster } from '../entities/Monster';
 import { Boss } from '../entities/Boss';
+import { prepareInterstitialAd, showInterstitialAd } from '../bedrock.js';
 
 export class Game {
     constructor() {
@@ -35,6 +36,9 @@ export class Game {
         requestAnimationFrame(this.loop);
 
         this.setupControls();
+
+        // 광고 사전 로드
+        prepareInterstitialAd();
     }
 
     setupControls() {
@@ -46,8 +50,9 @@ export class Game {
             this.startStage(this.currentLevel);
         });
 
-        document.getElementById('continue-btn').addEventListener('click', () => {
-            // TODO: 나중에 앱인토스 광고 시청 로직 추가
+        document.getElementById('continue-btn').addEventListener('click', async () => {
+            // 광고 표시 후 부활
+            await showInterstitialAd();
             this.revivePlayer();
         });
     }
