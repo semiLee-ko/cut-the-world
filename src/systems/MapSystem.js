@@ -25,7 +25,7 @@ export class MapSystem {
         // Initialize owned area around spawn
         const spawnX = Math.floor(this.cols / 2);
         const spawnY = Math.floor(this.rows / 2);
-        const radius = 8; // Increased from 5 to compensate for smaller GRID_SIZE
+        const radius = 40; // Increased to 40 for GRID_SIZE=1 (was 8)
 
         for (let dy = -radius; dy <= radius; dy++) {
             for (let dx = -radius; dx <= radius; dx++) {
@@ -241,6 +241,8 @@ export class MapSystem {
             }
         }
 
+        this.isDirty = true; // Set dirty flag after converting trail to owned
+
         // 2. 경계가 확정된 후 빈 영역 찾기
         const areas = this.findEmptyAreas();
         console.log(`  Found ${areas.length} empty areas`);
@@ -255,28 +257,34 @@ export class MapSystem {
                     }
                 }
             }
+            this.isDirty = true; // Set dirty flag if remaining trail is converted
             return 0;
         }
 
         // 4. 모든 영역 채우기 (몬스터 여부 무시)
+        const newCells = [];
         for (const area of areas) {
             console.log(`  Filling area (${area.length} cells)`);
             for (const cell of area) {
                 this.grid[cell.y][cell.x] = CONSTANTS.CELL_TYPE.OWNED;
+                newCells.push(cell);
                 filledCount++;
             }
         }
+
+        this.isDirty = true; // Set dirty flag after filling areas
 
         // 5. 남은 TRAIL도 모두 OWNED로 변환
         for (let y = 0; y < this.rows; y++) {
             for (let x = 0; x < this.cols; x++) {
                 if (this.grid[y][x] === CONSTANTS.CELL_TYPE.TRAIL) {
                     this.grid[y][x] = CONSTANTS.CELL_TYPE.OWNED;
+                    newCells.push({ x, y });
                 }
             }
         }
 
-        return filledCount;
+        return { count: filledCount, newCells };
     }
 
     clearTrails() {

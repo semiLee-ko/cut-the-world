@@ -34,6 +34,8 @@ export class Renderer {
         this.windParticles = [];
         this.initWind();
 
+        this.captureEffects = [];
+
         this.init();
     }
 
@@ -99,6 +101,8 @@ export class Renderer {
         if (this.assetManager.loaded) {
             this.terrainRendered = false;
         }
+
+        this.needsRedraw = true;
     }
 
     updateCamera(player) {
@@ -136,7 +140,7 @@ export class Renderer {
         // Apply Camera Translation
         this.ctx.translate(-this.camera.x, -this.camera.y);
 
-        this.drawMap(mapSystem, theme);
+        this.drawMap(mapSystem, theme, player);
         this.drawPlayer(player);
         this.drawMonsters(monsters);
         if (mapSystem.boss) {
@@ -163,6 +167,13 @@ export class Renderer {
         if (effects && effects.type === 'dark_fog' && effects.active) {
             this.drawDarkFog(player);
         }
+
+        // Draw Capture Effects (World Space, but overlay)
+        this.ctx.save();
+        this.ctx.scale(this.zoomLevel, this.zoomLevel);
+        this.ctx.translate(-this.camera.x, -this.camera.y);
+        this.drawCaptureEffects();
+        this.ctx.restore();
     }
 
     renderTerrainLayer(mapSystem) {
@@ -194,7 +205,7 @@ export class Renderer {
         this.terrainRendered = true;
     }
 
-    drawMap(mapSystem, theme) {
+    drawMap(mapSystem, theme, player) {
         // 1. Render Terrain if needed
         if (this.assetManager.loaded && !this.terrainRendered) {
             this.renderTerrainLayer(mapSystem);
@@ -204,19 +215,49 @@ export class Renderer {
         this.ctx.drawImage(this.terrainCanvas, 0, 0);
 
         // 3. Draw Fog of War
-        // A. Prepare Mask (White on Transparent)
-        this.maskCtx.clearRect(0, 0, this.maskCanvas.width, this.maskCanvas.height);
-        this.maskCtx.fillStyle = '#FFF';
+        // A. Prepare Mask (Update only if dirty)
+        // Note: The mask is persistent. We only add new OWNED areas or reset if needed.
+        // For simplicity with the current architecture where we don't track incremental updates easily in Renderer,
+        // we can check a dirty flag from MapSystem or just optimize the loop.
 
-        const size = CONSTANTS.GRID_SIZE;
-        const grid = mapSystem.grid;
+        // BETTER APPROACH: Render grid to imageData directly if dirty? 
+        // OR: Just don't clear the maskCanvas every frame. The mask accumulates OWNED areas.
+        // The only time we need to clear is on reset.
+        // BUT: MapSystem resets sometimes.
 
-        for (let y = 0; y < mapSystem.rows; y++) {
-            for (let x = 0; x < mapSystem.cols; x++) {
-                if (grid[y][x] === CONSTANTS.CELL_TYPE.OWNED) {
-                    this.maskCtx.fillRect(x * size, y * size, size, size);
+        if (mapSystem.isDirty || this.needsRedraw) {
+            this.maskCtx.fillStyle = '#FFF';
+            const size = CONSTANTS.GRID_SIZE;
+            const grid = mapSystem.grid;
+
+            // Optimization: If full redraw is needed (e.g. reset), clear first.
+            // If incremental, just draw new... but we don't know which are new easily here without diff.
+            // Given the performance issue, let's assume we redraw the whole thing ONLY when dirty.
+            // Ideally we should track "newly owned" pixels, but for now 360k iterations once per capture is better than 60 FPS.
+
+            this.maskCtx.clearRect(0, 0, this.maskCanvas.width, this.maskCanvas.height);
+
+            // Use direct pixel manipulation for speed (ImageData)
+            const width = this.maskCanvas.width;
+            const height = this.maskCanvas.height;
+            const imageData = this.maskCtx.getImageData(0, 0, width, height);
+            const data = imageData.data;
+
+            for (let y = 0; y < mapSystem.rows; y++) {
+                for (let x = 0; x < mapSystem.cols; x++) {
+                    if (grid[y][x] === CONSTANTS.CELL_TYPE.OWNED) {
+                        // Set pixel to white (255, 255, 255, 255)
+                        const index = (y * width + x) * 4;
+                        data[index] = 255;
+                        data[index + 1] = 255;
+                        data[index + 2] = 255;
+                        data[index + 3] = 255;
+                    }
                 }
             }
+            this.maskCtx.putImageData(imageData, 0, 0);
+            mapSystem.isDirty = false;
+            this.needsRedraw = false;
         }
 
         // B. Draw Fog Background
@@ -233,25 +274,58 @@ export class Renderer {
 
         // C. Cut out Mask with Soft Edge
         this.fogCtx.globalCompositeOperation = 'destination-out';
-        this.fogCtx.shadowBlur = 20; // Soft edge amount
-        this.fogCtx.shadowColor = '#000'; // Color doesn't matter for destination-out, but needed for shadow
-        this.fogCtx.drawImage(this.maskCanvas, 0, 0);
+        this.fogCtx.shadowBlur = 3; // Reduced to 4 for very sharp edge
+        this.fogCtx.shadowColor = '#000';
+
+        // Offset Shadow Trick
+        const offset = 20000;
+        this.fogCtx.shadowOffsetX = offset;
+        this.fogCtx.shadowOffsetY = 0;
+
+        this.fogCtx.drawImage(this.maskCanvas, -offset, 0);
+
+        // Reset shadow props
+        this.fogCtx.shadowOffsetX = 0;
+        this.fogCtx.shadowOffsetY = 0;
 
         // Reset shadow
-        this.fogCtx.shadowBlur = 0;
+        this.fogCtx.shadowBlur = 2;
         this.fogCtx.shadowColor = 'transparent';
 
         // D. Draw Fog Overlay
         this.ctx.drawImage(this.fogCanvas, 0, 0);
 
         // 4. Draw Trails
-        this.ctx.fillStyle = CONSTANTS.COLORS.TRAIL;
-        for (let y = 0; y < mapSystem.rows; y++) {
-            for (let x = 0; x < mapSystem.cols; x++) {
-                if (grid[y][x] === CONSTANTS.CELL_TYPE.TRAIL) {
-                    this.ctx.fillRect(x * size, y * size, size, size);
-                }
+        if (player && player.trail && player.trail.length > 0) {
+            const size = Math.max(CONSTANTS.GRID_SIZE, 3); // Minimum 3px for visibility/smoothness
+
+            this.ctx.save();
+            this.ctx.strokeStyle = CONSTANTS.COLORS.TRAIL;
+            this.ctx.lineWidth = size;
+            this.ctx.lineCap = 'round';
+            this.ctx.lineJoin = 'round';
+            this.ctx.beginPath();
+
+            // Start from the first point
+            const startP = player.trail[0];
+            let startGx = Math.floor(startP.x / CONSTANTS.GRID_SIZE) * CONSTANTS.GRID_SIZE + size / 2; // Center offset if needed? No, path follows points.
+            // Actually, if we use coordinates directly it's smoother.
+            // The grid logic is for logic, but rendering can be world coords.
+            // player.trail contains world coordinates (interpolated in Player.js).
+
+            this.ctx.moveTo(startP.x, startP.y);
+
+            for (let i = 1; i < player.trail.length; i++) {
+                const point = player.trail[i];
+                this.ctx.lineTo(point.x, point.y);
             }
+
+            // Connect to current player position? 
+            // Usually valid to prevent gap between last trail point and player.
+            this.ctx.lineTo(player.x, player.y);
+
+            this.ctx.stroke();
+            this.ctx.restore();
         }
     }
 
@@ -494,5 +568,46 @@ export class Renderer {
         this.ctx.fill();
 
         this.ctx.restore();
+    }
+    addCaptureEffect(cells) {
+        // Create a new effect object
+        this.captureEffects.push({
+            cells: cells, // Array of {x, y}
+            timer: 0,
+            duration: 1000, // 1 second fade out
+            opacity: 1.0
+        });
+    }
+
+    drawCaptureEffects() {
+        if (this.captureEffects.length === 0) return;
+
+        const size = CONSTANTS.GRID_SIZE; // 1
+
+        // Update and filter
+        this.captureEffects.forEach(effect => {
+            effect.timer += 16.6; // Approx dt
+            effect.opacity = 1.0 - (effect.timer / effect.duration);
+        });
+
+        this.captureEffects = this.captureEffects.filter(e => e.timer < e.duration);
+
+        // Draw
+        for (const effect of this.captureEffects) {
+            if (effect.opacity <= 0) continue;
+
+            this.ctx.save();
+            this.ctx.globalAlpha = effect.opacity;
+            this.ctx.fillStyle = CONSTANTS.COLORS.TRAIL;
+
+            this.ctx.beginPath();
+            for (const cell of effect.cells) {
+                const gx = Math.floor(cell.x / CONSTANTS.GRID_SIZE) * CONSTANTS.GRID_SIZE;
+                const gy = Math.floor(cell.y / CONSTANTS.GRID_SIZE) * CONSTANTS.GRID_SIZE;
+                this.ctx.rect(gx, gy, size, size);
+            }
+            this.ctx.fill();
+            this.ctx.restore();
+        }
     }
 }

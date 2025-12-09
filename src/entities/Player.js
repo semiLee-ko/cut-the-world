@@ -95,9 +95,33 @@ export class Player {
             }
 
             if (nextCell === CONSTANTS.CELL_TYPE.UNOWNED) {
-                mapSystem.setCell(nextX, nextY, CONSTANTS.CELL_TYPE.TRAIL);
-                // trail에 현재 위치 저장
-                this.trail.push({ x: nextX, y: nextY });
+                // Interpolate to fill gaps if speed > 1
+                const dictX = nextX - this.x;
+                const dictY = nextY - this.y;
+                const dist = Math.hypot(dictX, dictY);
+                const steps = Math.ceil(dist); // Ensure we hit every pixel
+
+                for (let i = 1; i <= steps; i++) {
+                    const t = i / steps;
+                    const tx = this.x + dictX * t;
+                    const ty = this.y + dictY * t;
+
+                    // Avoid adding duplicate points if they map to same grid cell? 
+                    // MapSystem.setCell handles coords.
+                    // Just pushing to trail and setting cell is enough.
+                    // Note: setCell handles grid mapping. 
+
+                    mapSystem.setCell(tx, ty, CONSTANTS.CELL_TYPE.TRAIL);
+
+                    // Optimize trail array: only push if different from last? 
+                    // For now, simple push is safer for continuity.
+                    // But we should check if we already pushed this exact pixel to avoid bloating trail array.
+                    // With GRID_SIZE 1, it matches pixels.
+
+                    // Let's just push significant changes or all?
+                    // Pushing all might be heavy if steps are huge, but here steps ~ 1 or 2.
+                    this.trail.push({ x: tx, y: ty });
+                }
             }
         }
 

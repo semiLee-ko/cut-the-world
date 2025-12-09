@@ -4,8 +4,8 @@ export class Boss {
     constructor(x, y) {
         this.x = x;
         this.y = y;
-        this.radius = 24; // 충돌 판정 확대 (20 → 24)
-        this.speed = 80; // Slower than normal monsters
+        this.radius = 19; // Reduced by ~20% (24 -> 19)
+        this.speed = 80;
         this.angle = Math.random() * Math.PI * 2;
 
         // State
@@ -23,6 +23,46 @@ export class Boss {
         this.currentFrame = 0;
         this.totalFrames = 2;
         this.frameDuration = 200; // 200ms per frame
+
+        // Lives
+        this.lives = 3;
+        this.isInvincible = false;
+    }
+
+    takeDamage(mapSystem) {
+        if (this.isInvincible) return false;
+
+        this.lives--;
+        this.teleportToSafeSpot(mapSystem);
+
+        return true;
+    }
+
+    teleportToSafeSpot(mapSystem) {
+        let attempts = 0;
+        let bx, by;
+
+        // Try to find a spot that is UNOWNED and within bounds with padding
+        do {
+            bx = this.radius + Math.random() * (mapSystem.width - this.radius * 2);
+            by = this.radius + Math.random() * (mapSystem.height - this.radius * 2);
+            attempts++;
+        } while (
+            (mapSystem.getCell(bx, by) === CONSTANTS.CELL_TYPE.OWNED) &&
+            attempts < 50
+        );
+
+        if (attempts >= 50) {
+            bx = this.radius + Math.random() * (mapSystem.width - this.radius * 2);
+            by = this.radius + Math.random() * (mapSystem.height - this.radius * 2);
+        }
+
+        this.x = bx;
+        this.y = by;
+
+        // Reset state
+        this.state = 'MOVING';
+        this.targetArea = null;
     }
 
     update(mapSystem, dt, player) {
@@ -51,32 +91,82 @@ export class Boss {
     }
 
     updateMovement(mapSystem, dt) {
-        // Move in current direction
-        this.x += Math.cos(this.angle) * this.speed * (dt / 1000);
-        this.y += Math.sin(this.angle) * this.speed * (dt / 1000);
+        // Predict next position
+        let nextX = this.x + Math.cos(this.angle) * this.speed * (dt / 1000);
+        let nextY = this.y + Math.sin(this.angle) * this.speed * (dt / 1000);
 
-        // Bounce off walls
         let bounced = false;
-        if (this.x < this.radius) {
-            this.x = this.radius;
+
+        // Check Map Boundaries (Center point check with radius padding)
+        if (nextX < this.radius) {
+            nextX = this.radius;
             this.angle = Math.PI - this.angle;
             bounced = true;
         }
-        if (this.x > mapSystem.width - this.radius) {
-            this.x = mapSystem.width - this.radius;
+        if (nextX > mapSystem.width - this.radius) {
+            nextX = mapSystem.width - this.radius;
             this.angle = Math.PI - this.angle;
             bounced = true;
         }
-        if (this.y < this.radius) {
-            this.y = this.radius;
+        if (nextY < this.radius) {
+            nextY = this.radius;
             this.angle = -this.angle;
             bounced = true;
         }
-        if (this.y > mapSystem.height - this.radius) {
-            this.y = mapSystem.height - this.radius;
+        if (nextY > mapSystem.height - this.radius) {
+            nextY = mapSystem.height - this.radius;
             this.angle = -this.angle;
             bounced = true;
         }
+
+        if (!bounced) {
+            // Helper to check collision with OWNED cells
+            const isOwned = (x, y) => {
+                // Bounds safety check
+                if (x < 0 || x >= mapSystem.width || y < 0 || y >= mapSystem.height) return true;
+                return mapSystem.getCell(x, y) === CONSTANTS.CELL_TYPE.OWNED;
+            };
+
+            // Bounce off OWNED cells
+            // Check radius distance ahead to prevent sticking
+            const checkDist = this.radius + 2;
+            const checkX = nextX + Math.cos(this.angle) * checkDist;
+            const checkY = nextY + Math.sin(this.angle) * checkDist;
+
+            if (isOwned(checkX, checkY)) {
+                // Let's check X and Y components separately for better bounce
+                const nextX_only = this.x + Math.cos(this.angle) * this.speed * (dt / 1000);
+                const nextY_only = this.y + Math.sin(this.angle) * this.speed * (dt / 1000);
+
+                // Check if moving only in X would hit (using radius margin)
+                const hitX = isOwned(nextX_only + Math.sign(Math.cos(this.angle)) * this.radius, this.y);
+                // Check if moving only in Y would hit
+                const hitY = isOwned(this.x, nextY_only + Math.sign(Math.sin(this.angle)) * this.radius);
+
+                if (hitX) {
+                    this.angle = Math.PI - this.angle;
+                    bounced = true;
+                    nextX = this.x;
+                }
+                if (hitY) {
+                    this.angle = -this.angle;
+                    bounced = true;
+                    nextY = this.y;
+                }
+
+                if (!hitX && !hitY) {
+                    // Head-on or complex angle, just reverse
+                    this.angle += Math.PI;
+                    bounced = true;
+                    nextX = this.x;
+                    nextY = this.y;
+                }
+            }
+        }
+
+        // Update position
+        this.x = nextX;
+        this.y = nextY;
 
         // Randomly change direction occasionally
         if (!bounced && Math.random() < 0.02) {
@@ -90,10 +180,6 @@ export class Boss {
         this.skillTimer = 0;
 
         // Calculate Target Area (5% of total map area)
-        // Area = PI * r^2
-        // Total Area = W * H
-        // Target Area = 0.05 * W * H
-        // r = Sqrt(0.05 * W * H / PI)
         const totalArea = mapSystem.width * mapSystem.height;
         const targetAreaSize = totalArea * 0.05;
         const targetRadius = Math.sqrt(targetAreaSize / Math.PI);
@@ -119,14 +205,12 @@ export class Boss {
 
         if (dist < this.targetArea.radius + player.radius) {
             // Player Hit!
-            // We'll return a status code to Game.js to handle Game Over
             this.lastSkillResult = 'KILL';
         } else {
             this.lastSkillResult = 'MISS';
         }
 
         // 2. Destroy Territory
-        // Iterate through grid cells within the radius
         const startCol = Math.max(0, Math.floor((this.targetArea.x - this.targetArea.radius) / CONSTANTS.GRID_SIZE));
         const endCol = Math.min(mapSystem.cols - 1, Math.ceil((this.targetArea.x + this.targetArea.radius) / CONSTANTS.GRID_SIZE));
         const startRow = Math.max(0, Math.floor((this.targetArea.y - this.targetArea.radius) / CONSTANTS.GRID_SIZE));

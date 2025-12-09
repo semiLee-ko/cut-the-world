@@ -1,12 +1,12 @@
 export const CONSTANTS = {
-    GAME_WIDTH: 288,
-    GAME_HEIGHT: 624,
-    GRID_SIZE: 3, // Collision grid size remains small for precision
+    GAME_WIDTH: 600,
+    GAME_HEIGHT: 600,
+    GRID_SIZE: 1, // Collision grid size remains small for precision
     TILE_SIZE: 48, // Visual tile size
     COLORS: {
         UNOWNED: '#222',
         OWNED: '#4CAF50',
-        TRAIL: '#FFC107',
+        TRAIL: '#ffe189ff',
         PLAYER: '#2196F3',
         MONSTER: '#F44336',
         WALL: '#555'
