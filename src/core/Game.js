@@ -69,7 +69,9 @@ export class Game {
         const stageData = this.stageManager.getStageData(level);
         this.currentLevel = level;
         this.uiStageLevel.textContent = level;
-        this.currentStageEffects = stageData.effects || {};
+
+        // Deep clone effects to prevent persisting state (timers/flags) to the static config
+        this.currentStageEffects = stageData.effects ? JSON.parse(JSON.stringify(stageData.effects)) : {};
 
         // Show Loading Screen
         document.getElementById('loading-screen').style.display = 'flex';
@@ -98,7 +100,7 @@ export class Game {
             this.currentStageEffects.active = false;
             this.currentStageEffects.timer = 0;
             this.currentStageEffects.nextTrigger = Math.random() * 10000 + 15000; // 15-25s
-            this.currentStageEffects.duration = 3000; // 3s
+            this.currentStageEffects.duration = 5000; // 3s
         }
 
         // Initialize Space Distortion (Stage 9)
@@ -212,9 +214,32 @@ export class Game {
         }
 
         // Update Dark Fog
+        // Update Dark Fog
         if (this.currentStageEffects && this.currentStageEffects.type === 'dark_fog') {
             this.currentStageEffects.timer += dt;
+
+            // Initialize default visual state
+            this.currentStageEffects.opacity = 0;
+            this.currentStageEffects.warning = false;
+
             if (this.currentStageEffects.active) {
+                // Active Phase with Fade In/Out
+                // Fade In (0 ~ 1s)
+                if (this.currentStageEffects.timer < 1000) {
+                    this.currentStageEffects.opacity = this.currentStageEffects.timer / 1000;
+                }
+                // Fade Out (Last 1s)
+                else if (this.currentStageEffects.timer > this.currentStageEffects.duration - 1000) {
+                    this.currentStageEffects.opacity = (this.currentStageEffects.duration - this.currentStageEffects.timer) / 1000;
+                }
+                // Full Dark
+                else {
+                    this.currentStageEffects.opacity = 1.0;
+                }
+
+                // Clamp
+                this.currentStageEffects.opacity = Math.max(0, Math.min(this.currentStageEffects.opacity, 1.0));
+
                 if (this.currentStageEffects.timer >= this.currentStageEffects.duration) {
                     this.currentStageEffects.active = false;
                     this.currentStageEffects.timer = 0;
@@ -222,6 +247,15 @@ export class Game {
                     console.log('Dark Fog ended');
                 }
             } else {
+                // Idle Phase
+                // Check for Warning (3 seconds before start)
+                const timeLeft = this.currentStageEffects.nextTrigger - this.currentStageEffects.timer;
+
+                if (timeLeft <= 3000 && timeLeft > 0) {
+                    this.currentStageEffects.warning = true;
+                    this.currentStageEffects.warningTimeLeft = timeLeft; // Pass for flash calculation
+                }
+
                 if (this.currentStageEffects.timer >= this.currentStageEffects.nextTrigger) {
                     this.currentStageEffects.active = true;
                     this.currentStageEffects.timer = 0;
@@ -233,12 +267,81 @@ export class Game {
         // Update Space Distortion
         if (this.currentStageEffects && this.currentStageEffects.type === 'space_distortion') {
             this.currentStageEffects.teleportTimer += dt;
+            const timeLeft = this.currentStageEffects.nextTeleport - this.currentStageEffects.teleportTimer;
+
+            // Warning Phase (2 seconds before)
+            if (timeLeft <= 2000 && timeLeft > 0) {
+                this.currentStageEffects.warning = true;
+                this.currentStageEffects.warningTimer = 2000 - timeLeft; // 0 -> 2000
+            } else {
+                this.currentStageEffects.warning = false;
+            }
+
             if (this.currentStageEffects.teleportTimer >= this.currentStageEffects.nextTeleport) {
+                // Time to Teleport!
                 this.currentStageEffects.teleportTimer = 0;
-                this.currentStageEffects.nextTeleport = Math.random() * 5000 + 15000; // Reset trigger to 15-20s
-                this.player.teleport(this.mapSystem);
-                console.log('Player teleported');
-                // Camera update is automatic in render() loop
+                this.currentStageEffects.nextTeleport = Math.random() * 5000 + 15000; // 15-20s
+                this.currentStageEffects.warning = false;
+
+                // 1. Pop at Old Position
+                this.renderer.addTeleportPop(this.player.x, this.player.y);
+
+                // 2. Find Random Owned Cell
+                // Try 50 times to find an OWNED cell. If failed (unlikely), stay or pick any safe spot.
+                let targetX = this.player.x;
+                let targetY = this.player.y;
+                let found = false;
+
+                for (let i = 0; i < 50; i++) {
+                    const rx = Math.floor(Math.random() * this.mapSystem.width);
+                    const ry = Math.floor(Math.random() * this.mapSystem.height);
+                    const cell = this.mapSystem.getCell(rx, ry);
+
+                    if (cell === CONSTANTS.CELL_TYPE.OWNED) {
+                        targetX = rx;
+                        targetY = ry;
+                        found = true;
+                        break;
+                    }
+                }
+
+                if (!found) {
+                    // Fallback: Just random safe spot (existing logic)
+                    // But user requested OWNED area only. 
+                    // Assuming player always has some owned area (start area). 
+                    // If we really can't find one, we skip teleport or keep old position.
+                    console.warn('Could not find OWNED area for teleport');
+                } else {
+                    // Clear existing trail on MAP before moving
+                    if (this.player.trail.length > 0) {
+                        for (const point of this.player.trail) {
+                            // Reset trail cells to UNOWNED (assuming trail only exists on unowned land)
+                            this.mapSystem.setCell(point.x, point.y, 2); // 2 = UNOWNED from CONSTANTS? or use CONSTANTS.CELL_TYPE.UNOWNED
+                            // Wait, I don't have direct access to CONSTANTS here nicely unless I import or use mapSystem helper?
+                            // mapSystem.setCell uses internal constants maybe?
+                            // Let's use string 'UNOWNED' and let explicit logic handle it?
+                            // No, mapSystem.setCell expects INT.
+                            // I should verify CONSTANTS is imported in Game.js. Yes, line 1 of Game.js usually.
+                            // Checking imports...
+                        }
+                    }
+
+                    // Actually, let's use CONSTANTS.CELL_TYPE.UNOWNED.
+                    // Access CONSTANTS from import.
+
+                    this.player.trail.forEach(p => {
+                        this.mapSystem.setCell(p.x, p.y, CONSTANTS.CELL_TYPE.UNOWNED);
+                    });
+
+                    this.player.x = targetX;
+                    this.player.y = targetY;
+                    this.player.isDrawing = false;
+                    this.player.trail = [];
+                    console.log('Player teleported to OWNED area', targetX, targetY);
+                }
+
+                // 3. Pop at New Position
+                this.renderer.addTeleportPop(this.player.x, this.player.y);
             }
         }
 
@@ -277,11 +380,12 @@ export class Game {
         if (playerState === 'FILL') {
             // 현재 trail만 OWNED로 변환하도록 trail 정보 전달
             console.log(`🎮 Calling fillAreas with ${this.monsters.length} monsters`);
-            const { count, newCells } = this.mapSystem.fillAreas(this.monsters, this.player.lastTrail);
+            const res = this.mapSystem.fillAreas(this.monsters, this.player.lastTrail);
+            const { count, newCells } = res;
 
             // Trigger visual effect for captured area
             if (newCells && newCells.length > 0) {
-                this.renderer.addCaptureEffect(newCells);
+                this.renderer.addCaptureEffect(newCells, res.cols);
             }
 
             // Remove monsters that are now in OWNED area
@@ -497,7 +601,7 @@ export class Game {
         this.lastTime = timestamp;
 
         this.update(dt);
-        this.draw();
+        this.draw(dt);
 
         if (this.isRunning || this.isPaused || this.isTransitioning) { // Keep loop running for rendering even if paused/transitioning
             requestAnimationFrame(this.loop);

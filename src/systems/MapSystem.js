@@ -184,44 +184,83 @@ export class MapSystem {
     }
 
     findEmptyAreas() {
-        const visited = Array(this.rows).fill().map(() => Array(this.cols).fill(false));
+        const rows = this.rows;
+        const cols = this.cols;
+        const total = rows * cols;
+        const visited = new Uint8Array(total); // 0: not visited, 1: visited
         const areas = [];
 
-        for (let y = 0; y < this.rows; y++) {
-            for (let x = 0; x < this.cols; x++) {
-                if (this.grid[y][x] === CONSTANTS.CELL_TYPE.UNOWNED && !visited[y][x]) {
-                    const area = [];
-                    const stack = [{ x, y }];
-                    visited[y][x] = true;
-                    let touchesBorder = false; // 맵 경계에 닿는지 체크
+        // Stack for DFS
+        const stack = [];
+
+        for (let y = 0; y < rows; y++) {
+            for (let x = 0; x < cols; x++) {
+                // Check if unowned and not visited
+                // Must calculate linear index
+                const startIdx = y * cols + x;
+
+                if (this.grid[y][x] === CONSTANTS.CELL_TYPE.UNOWNED && visited[startIdx] === 0) {
+
+                    let currentArea = []; // Stores indices now
+                    let touchesBorder = false;
+
+                    stack.push(startIdx);
+                    visited[startIdx] = 1;
 
                     while (stack.length > 0) {
-                        const p = stack.pop();
-                        area.push(p);
+                        const idx = stack.pop();
+                        const cy = Math.floor(idx / cols);
+                        const cx = idx % cols;
 
-                        // 맵 경계 체크
-                        if (p.x === 0 || p.x === this.cols - 1 || p.y === 0 || p.y === this.rows - 1) {
+                        // Identify border touch
+                        if (cx === 0 || cx === cols - 1 || cy === 0 || cy === rows - 1) {
                             touchesBorder = true;
+                            // Optimization: Discard immediately
+                            if (currentArea.length > 0) currentArea = [];
                         }
 
-                        const neighbors = [
-                            { x: p.x + 1, y: p.y }, { x: p.x - 1, y: p.y },
-                            { x: p.x, y: p.y + 1 }, { x: p.x, y: p.y - 1 }
-                        ];
+                        // Only collect cells if we haven't touched the border yet
+                        if (!touchesBorder) {
+                            currentArea.push(idx);
+                        }
 
-                        for (const n of neighbors) {
-                            if (this.isValid(n.x, n.y) && !visited[n.y][n.x] && this.grid[n.y][n.x] === CONSTANTS.CELL_TYPE.UNOWNED) {
-                                visited[n.y][n.x] = true;
-                                stack.push(n);
+                        // Neighbors: Up, Down, Left, Right
+                        // Right
+                        if (cx + 1 < cols) {
+                            const nIdx = idx + 1;
+                            if (visited[nIdx] === 0 && this.grid[cy][cx + 1] === CONSTANTS.CELL_TYPE.UNOWNED) {
+                                visited[nIdx] = 1;
+                                stack.push(nIdx);
+                            }
+                        }
+                        // Left
+                        if (cx - 1 >= 0) {
+                            const nIdx = idx - 1;
+                            if (visited[nIdx] === 0 && this.grid[cy][cx - 1] === CONSTANTS.CELL_TYPE.UNOWNED) {
+                                visited[nIdx] = 1;
+                                stack.push(nIdx);
+                            }
+                        }
+                        // Down
+                        if (cy + 1 < rows) {
+                            const nIdx = idx + cols;
+                            if (visited[nIdx] === 0 && this.grid[cy + 1][cx] === CONSTANTS.CELL_TYPE.UNOWNED) {
+                                visited[nIdx] = 1;
+                                stack.push(nIdx);
+                            }
+                        }
+                        // Up
+                        if (cy - 1 >= 0) {
+                            const nIdx = idx - cols;
+                            if (visited[nIdx] === 0 && this.grid[cy - 1][cx] === CONSTANTS.CELL_TYPE.UNOWNED) {
+                                visited[nIdx] = 1;
+                                stack.push(nIdx);
                             }
                         }
                     }
 
-                    // 맵 경계에 닿지 않은 영역만 추가
-                    if (!touchesBorder) {
-                        areas.push(area);
-                    } else {
-                        console.log(`  ⚠️ Skipping border area (${area.length} cells)`);
+                    if (!touchesBorder && currentArea.length > 0) {
+                        areas.push(currentArea);
                     }
                 }
             }
@@ -230,8 +269,6 @@ export class MapSystem {
     }
 
     fillAreas(monsters, currentTrail = []) {
-        console.log('🎯 fillAreas called with currentTrail:', currentTrail);
-
         // 1. 현재 trail을 먼저 OWNED로 변환 (경계 확정)
         for (const point of currentTrail) {
             const gx = Math.floor(point.x / CONSTANTS.GRID_SIZE);
@@ -248,43 +285,42 @@ export class MapSystem {
         console.log(`  Found ${areas.length} empty areas`);
         let filledCount = 0;
 
-        if (areas.length === 0) {
-            // 3. 남은 TRAIL도 모두 OWNED로 변환
-            for (let y = 0; y < this.rows; y++) {
-                for (let x = 0; x < this.cols; x++) {
-                    if (this.grid[y][x] === CONSTANTS.CELL_TYPE.TRAIL) {
-                        this.grid[y][x] = CONSTANTS.CELL_TYPE.OWNED;
-                    }
-                }
-            }
-            this.isDirty = true; // Set dirty flag if remaining trail is converted
-            return 0;
-        }
+        // If no areas explicitly found, we still check trail cleanup below.
+        // But logic requires: if background is connected, areas will be empty.
+        // Wait, logic in original was: "If areas is empty -> convert remaining trail".
 
-        // 4. 모든 영역 채우기 (몬스터 여부 무시)
-        const newCells = [];
+        // 4. 모든 영역 채우기 (몬스터 여부 무시 - monsters were filtered elsewhere? 
+        // No, original logic blindly filled areas. Monsters inside are killed by Game.js loop checking OWNED)
+        const newCells = []; // Stores indices
         for (const area of areas) {
             console.log(`  Filling area (${area.length} cells)`);
-            for (const cell of area) {
-                this.grid[cell.y][cell.x] = CONSTANTS.CELL_TYPE.OWNED;
-                newCells.push(cell);
+            for (const idx of area) {
+                const cy = Math.floor(idx / this.cols);
+                const cx = idx % this.cols;
+                this.grid[cy][cx] = CONSTANTS.CELL_TYPE.OWNED;
+                newCells.push(idx);
                 filledCount++;
             }
         }
 
-        this.isDirty = true; // Set dirty flag after filling areas
+        if (areas.length > 0) this.isDirty = true;
 
         // 5. 남은 TRAIL도 모두 OWNED로 변환
         for (let y = 0; y < this.rows; y++) {
             for (let x = 0; x < this.cols; x++) {
                 if (this.grid[y][x] === CONSTANTS.CELL_TYPE.TRAIL) {
                     this.grid[y][x] = CONSTANTS.CELL_TYPE.OWNED;
-                    newCells.push({ x, y });
+                    // Also add to newCells for effect
+                    newCells.push(y * this.cols + x);
                 }
             }
         }
 
-        return { count: filledCount, newCells };
+        // Optimize: If we converted trail, dirty is true.
+        // Actually fillAreas usually implies we closed a loop, so trail is converted.
+        this.isDirty = true;
+
+        return { count: filledCount, newCells, cols: this.cols };
     }
 
     clearTrails() {

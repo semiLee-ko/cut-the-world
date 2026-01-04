@@ -16,13 +16,20 @@ export class Renderer {
         this.fogCanvas = document.createElement('canvas');
         this.fogCtx = this.fogCanvas.getContext('2d');
 
-        // Offscreen canvas for Mask (to create soft edges)
+        // Offscreen canvas for Mask (to create soft edges for Fog of War)
         this.maskCanvas = document.createElement('canvas');
-        this.maskCtx = this.maskCanvas.getContext('2d');
+        this.maskCtx = this.maskCanvas.getContext('2d', { willReadFrequently: true });
+
+        // Offscreen canvas for Dark Fog Effect (Screen Space)
+        this.darkFogCanvas = document.createElement('canvas');
+        this.darkFogCtx = this.darkFogCanvas.getContext('2d');
 
         // Temporary storage for common assets not yet in AssetManager
         this.commonImages = {};
         this.processedCommonImages = {};
+        // ... (lines 24-25 skipped in replace but context needed)
+
+        // ...
 
         // Camera
         this.camera = { x: 0, y: 0, width: 0, height: 0 };
@@ -35,6 +42,8 @@ export class Renderer {
         this.initWind();
 
         this.captureEffects = [];
+        this.teleportPops = []; // Array for teleport animations
+        this.fogPattern = this.createFogTexture(); // Pre-generate texture
 
         this.init();
     }
@@ -91,12 +100,18 @@ export class Renderer {
         this.fogCtx.mozImageSmoothingEnabled = false;
         this.fogCtx.msImageSmoothingEnabled = false;
 
+        // Mask Canvas (Fog of War) matches World Size
         this.maskCanvas.width = this.worldWidth;
         this.maskCanvas.height = this.worldHeight;
         this.maskCtx.imageSmoothingEnabled = false;
         this.maskCtx.webkitImageSmoothingEnabled = false;
         this.maskCtx.mozImageSmoothingEnabled = false;
         this.maskCtx.msImageSmoothingEnabled = false;
+
+        // Dark Fog Canvas matches Screen Size
+        this.darkFogCanvas.width = this.canvas.width;
+        this.darkFogCanvas.height = this.canvas.height;
+        this.darkFogCtx.imageSmoothingEnabled = false;
 
         if (this.assetManager.loaded) {
             this.terrainRendered = false;
@@ -128,7 +143,7 @@ export class Renderer {
         this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
     }
 
-    render(mapSystem, player, monsters, theme, windData, effects) {
+    render(mapSystem, player, monsters, theme, windData, effects, dt) {
         this.clear();
         this.updateCamera(player);
 
@@ -152,6 +167,12 @@ export class Renderer {
             this.drawWindIndicator(player, windData);
         }
 
+        // Draw Space Distortion Effects (World Space)
+        if (theme === 'space') {
+            this.drawSpaceDistortion(player, effects);
+            this.drawTeleportPops(dt);
+        }
+
         this.ctx.restore();
 
         // Draw Weather Effects (Screen Space)
@@ -164,8 +185,8 @@ export class Renderer {
         }
 
         // Draw Dark Fog (Screen Space)
-        if (effects && effects.type === 'dark_fog' && effects.active) {
-            this.drawDarkFog(player);
+        if (effects && effects.type === 'dark_fog') {
+            this.drawDarkFog(player, effects);
         }
 
         // Draw Capture Effects (World Space, but overlay)
@@ -198,7 +219,10 @@ export class Renderer {
         for (const obj of mapSystem.objects) {
             const img = this.assetManager.getImage(obj.image);
             if (img && img.complete) {
-                this.terrainCtx.drawImage(img, obj.x, obj.y);
+                // Fix: Draw with specific size to prevent huge images (1024px) from covering map
+                // Center the object on the point? obj.x/y is top-left in generic placement.
+                // MapSystem generates x,y as top-left candidate usually but let's stick to standard drawImage.
+                this.terrainCtx.drawImage(img, obj.x, obj.y, tileSize, tileSize);
             }
         }
 
@@ -263,14 +287,19 @@ export class Renderer {
         // B. Draw Fog Background
         this.fogCtx.clearRect(0, 0, this.fogCanvas.width, this.fogCanvas.height);
         this.fogCtx.globalCompositeOperation = 'source-over';
+        this.fogCtx.globalAlpha = 0.90; // 90% opacity as requested
 
         if (theme === 'space') {
-            this.fogCtx.fillStyle = 'rgba(255, 255, 255, 0.8)'; // White Fog for Space
+            this.fogCtx.fillStyle = '#FFFFFF'; // White Fog for Space
         } else {
-            this.fogCtx.fillStyle = 'rgba(0, 0, 0, 0.8)'; // Black Fog for others
+            // Use texture pattern if available, otherwise fallback to black
+            this.fogCtx.fillStyle = this.fogPattern || '#000000';
         }
 
         this.fogCtx.fillRect(0, 0, this.fogCanvas.width, this.fogCanvas.height);
+
+        // Reset Alpha for cutting
+        this.fogCtx.globalAlpha = 1.0;
 
         // C. Cut out Mask with Soft Edge
         this.fogCtx.globalCompositeOperation = 'destination-out';
@@ -289,7 +318,7 @@ export class Renderer {
         this.fogCtx.shadowOffsetY = 0;
 
         // Reset shadow
-        this.fogCtx.shadowBlur = 2;
+        this.fogCtx.shadowBlur = 3;
         this.fogCtx.shadowColor = 'transparent';
 
         // D. Draw Fog Overlay
@@ -544,35 +573,192 @@ export class Renderer {
         this.ctx.restore();
     }
 
-    drawDarkFog(player) {
-        // Create a temporary canvas for the fog mask if not exists (reusing fogCanvas logic but screen space)
-        // Actually, we can draw directly to screen with composite operations.
+    drawDarkFog(player, effects) {
+        if (!effects) return;
+
+        // 1. Warning Phase (Flashing)
+        if (effects.warning) {
+            // Flash twice in 3 seconds.
+            // timeLeft goes 3000 -> 0.
+            // Flash 1: 3000-2500 (Show), 2500-1500 (Hide)
+            // Flash 2: 1500-1000 (Show), 1000-0 (Hide)
+            // Simpler: Math.sin based or simple threshold
+
+            const time = effects.warningTimeLeft;
+            // Quick double flash at the start (3s remaining)
+            // Flash 1: 2.9s - 2.7s
+            // Flash 2: 2.5s - 2.3s
+            const isFlash = (time > 2700 && time < 2900) || (time > 2300 && time < 2500);
+
+            if (isFlash) {
+                this.ctx.save();
+                this.ctx.fillStyle = 'rgba(0, 0, 0, 0.3)'; // Semi-dark flash
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+                this.ctx.restore();
+            }
+            return;
+        }
+
+        // 2. Active Phase (Darkening)
+        if (effects.active && effects.opacity > 0) {
+            // Use offscreen canvas to avoid cutting holes in the main game rendering
+            const mw = this.darkFogCanvas.width;
+            const mh = this.darkFogCanvas.height;
+
+            // Clear mask canvas
+            this.darkFogCtx.clearRect(0, 0, mw, mh);
+
+            this.darkFogCtx.save();
+
+            // Fill mask with black
+            this.darkFogCtx.fillStyle = '#000';
+            this.darkFogCtx.globalAlpha = effects.opacity; // Apply gradual fade
+            this.darkFogCtx.fillRect(0, 0, mw, mh);
+
+            // Cut out spotlight
+            this.darkFogCtx.globalCompositeOperation = 'destination-out';
+            this.darkFogCtx.globalAlpha = 1.0; // Cut fully transparent hole
+
+            // Calculate player position in screen space
+            // World -> Screen: (world - camera) * zoom
+            const screenX = (player.x - this.camera.x) * this.zoomLevel;
+            const screenY = (player.y - this.camera.y) * this.zoomLevel;
+            const radius = 80; // Reduced from 120 to 80 (Area halved roughly)
+
+            this.darkFogCtx.beginPath();
+            this.darkFogCtx.arc(screenX, screenY, radius, 0, Math.PI * 2);
+            this.darkFogCtx.fill();
+
+            this.darkFogCtx.restore();
+
+            // Draw the mask onto the main canvas
+            this.ctx.drawImage(this.darkFogCanvas, 0, 0);
+        }
+    }
+
+    drawSpaceDistortion(player, effects) {
+        if (!effects || !effects.warning) return;
+
+        // Warning Effect: Yellow circle converging on player
+        // timer goes from 0 to 2000 (2s warning)
+        // Progress: 0.0 -> 1.0
+        const progress = Math.min(effects.warningTimer / 2000, 1.0);
+
+        // Shrink: 200px -> 0px (or player size)
+        const startRadius = 20;
+        const endRadius = 2;
+        const currentRadius = startRadius - (startRadius - endRadius) * progress;
+
+        // Opacity: 0.0 -> 0.8 (Transparent to Opaque)
+        const opacity = progress * 1.0;
+
+        // Color: Light Yellow -> Deep Orange
+        const r = 255;
+        const g = Math.floor(235 - (235 - 152) * progress);
+        const b = Math.floor(59 - 59 * progress);
 
         this.ctx.save();
+        this.ctx.translate(player.x, player.y);
 
-        // 1. Fill screen with black
-        this.ctx.fillStyle = '#000';
-        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
-
-        // 2. Cut out player circle
-        this.ctx.globalCompositeOperation = 'destination-out';
-
-        // Calculate player position in screen space
-        // World -> Screen: (world - camera) * zoom
-        const screenX = (player.x - this.camera.x) * this.zoomLevel;
-        const screenY = (player.y - this.camera.y) * this.zoomLevel;
-        const radius = 100; // Visibility radius
-
+        // Draw Solid Circle (No Stroke)
         this.ctx.beginPath();
-        this.ctx.arc(screenX, screenY, radius, 0, Math.PI * 2);
+        this.ctx.arc(0, 0, currentRadius, 0, Math.PI * 2);
+        this.ctx.fillStyle = `rgba(${r}, ${g}, ${b}, ${opacity})`;
         this.ctx.fill();
 
         this.ctx.restore();
     }
-    addCaptureEffect(cells) {
+
+    addTeleportPop(x, y) {
+        this.teleportPops.push({
+            x: x,
+            y: y,
+            radius: 0,
+            maxRadius: 100,
+            alpha: 1.0,
+            duration: 500, // 0.5s
+            timer: 0
+        });
+    }
+
+    drawTeleportPops(dt) {
+        for (let i = this.teleportPops.length - 1; i >= 0; i--) {
+            const pop = this.teleportPops[i];
+            pop.timer += dt;
+            const progress = pop.timer / pop.duration;
+
+            if (progress >= 1.0) {
+                this.teleportPops.splice(i, 1);
+                continue;
+            }
+
+            // Animate
+            pop.radius = pop.maxRadius * Math.sin(progress * Math.PI / 2); // Easing out
+            pop.alpha = 1.0 - progress;
+
+            this.ctx.save();
+            this.ctx.beginPath();
+            this.ctx.arc(pop.x, pop.y, pop.radius, 0, Math.PI * 2);
+            this.ctx.strokeStyle = `rgba(255, 235, 59, ${pop.alpha})`; // Yellow
+            this.ctx.lineWidth = 5 * (1 - progress);
+            this.ctx.stroke();
+            this.ctx.restore();
+        }
+    }
+
+    // Helper to create fog texture (unused but kept for reference)
+    createFogTexture() {
+        const size = 512;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+
+        // Fill background
+        ctx.fillStyle = '#000000';
+        ctx.fillRect(0, 0, size, size);
+
+        // Draw multiple transparent circles to create cloud effect
+        for (let i = 0; i < 200; i++) {
+            const x = Math.random() * size;
+            const y = Math.random() * size;
+            const radius = 20 + Math.random() * 60;
+            const alpha = 0.05 + Math.random() * 0.05;
+
+            ctx.beginPath();
+            ctx.arc(x, y, radius, 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(50, 50, 50, ${alpha})`; // Subtle gray for texture over black
+            ctx.fill();
+        }
+
+        // Add some noise
+        const imageData = ctx.getImageData(0, 0, size, size);
+        const data = imageData.data;
+        for (let i = 0; i < data.length; i += 4) {
+            const noise = (Math.random() - 0.5) * 10;
+            data[i] = Math.max(0, Math.min(255, data[i] + noise));
+            data[i + 1] = Math.max(0, Math.min(255, data[i + 1] + noise));
+            data[i + 2] = Math.max(0, Math.min(255, data[i + 2] + noise));
+        }
+        ctx.putImageData(imageData, 0, 0);
+
+        return ctx.createPattern(canvas, 'repeat');
+    }
+
+    addCaptureEffect(cellIndices, cols) {
+        // Performance guard: If too many cells, skip the visual effect to prevent freeze
+        // 95k cells drawing rects caused 20s lag.
+        // Limit to ~2000 cells for the visual "flash" effect.
+        // Large areas still turn green (OWNED) so feedback is visible.
+        if (cellIndices.length > 20000) {
+            console.log(`[Renderer] Skipping capture effect for ${cellIndices.length} cells (too large)`);
+            return;
+        }
+
         // Create a new effect object
         this.captureEffects.push({
-            cells: cells, // Array of {x, y}
+            cells: cellIndices, // Array of indices (int)
+            cols: cols,         // Needed to reconstruct x,y
             timer: 0,
             duration: 1000, // 1 second fade out
             opacity: 1.0
@@ -601,9 +787,13 @@ export class Renderer {
             this.ctx.fillStyle = CONSTANTS.COLORS.TRAIL;
 
             this.ctx.beginPath();
-            for (const cell of effect.cells) {
-                const gx = Math.floor(cell.x / CONSTANTS.GRID_SIZE) * CONSTANTS.GRID_SIZE;
-                const gy = Math.floor(cell.y / CONSTANTS.GRID_SIZE) * CONSTANTS.GRID_SIZE;
+            const cols = effect.cols;
+
+            // Optimization: If purely contiguous, rects could be merged, but generic approach:
+            for (let i = 0; i < effect.cells.length; i++) {
+                const idx = effect.cells[i];
+                const gx = (idx % cols) * size;
+                const gy = Math.floor(idx / cols) * size;
                 this.ctx.rect(gx, gy, size, size);
             }
             this.ctx.fill();

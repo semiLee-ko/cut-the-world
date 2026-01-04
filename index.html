@@ -14,57 +14,50 @@
 </head>
 
 <body>
-  <div id="game-container">
-    <div id="game-frame">
-      <img id="logo" src="assets/logo.png" alt="Cut the Land" />
-      <div id="ui-layer">
-        <div id="score-board">
-          <div class="stage-display">STAGE <span id="stage-level">1</span></div>
-          <div class="stats-display">
-            <span>AREA: <span id="area-score">0</span>%</span>
-            <span>MONSTERS: <span id="monster-count">0</span></span>
-          </div>
-        </div>
-
-        <div id="ui-timer" style="display: none;">60</div>
-
-        <div id="controls">
-          <button class="control-btn icon-btn" id="pause-btn">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M6 4H10V20H6V4ZM14 4H18V20H14V4Z" fill="currentColor" />
-            </svg>
-          </button>
-        </div>
-
-        <div id="boss-hud" style="display: none;">
-          <div class="boss-heart active">❤️</div>
-          <div class="boss-heart active">❤️</div>
-          <div class="boss-heart active">❤️</div>
-        </div>
-      </div>
-
-      <div id="loading-screen">
-        <div class="pixel-loader"></div>
-      </div>
-
-      <div id="stage-result-popup" style="display: none;">
-        <div class="popup-content toss-style">
-          <h2 id="result-title">STAGE CLEAR!</h2>
-          <p id="result-description" class="result-description"></p>
-          <div id="result-buttons" class="button-group">
-            <!-- Buttons will be dynamically inserted -->
-          </div>
-        </div>
-      </div>
-
-      <canvas id="game-canvas"></canvas>
-      <div id="joystick-container">
-        <div id="joystick-knob"></div>
+  <img id="logo" src="assets/logo.png" alt="Cut the Land" />
+  <div id="ui-layer">
+    <div id="score-board">
+      <div class="stage-display">STAGE <span id="stage-level">1</span></div>
+      <div class="stats-display">
+        <span>AREA: <span id="area-score">0</span>%</span>
+        <span>MONSTERS: <span id="monster-count">0</span></span>
       </div>
     </div>
-    <footer>
-      &copy; 2025 CODA Creative. All rights reserved.
-    </footer>
+
+    <div id="ui-timer" style="display: none;">60</div>
+
+    <div id="controls">
+      <button class="control-btn icon-btn" id="pause-btn">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <path d="M6 4H10V20H6V4ZM14 4H18V20H14V4Z" fill="currentColor" />
+        </svg>
+      </button>
+    </div>
+
+    <div id="boss-hud" style="display: none;">
+      <div class="boss-heart active">❤️</div>
+      <div class="boss-heart active">❤️</div>
+      <div class="boss-heart active">❤️</div>
+    </div>
+  </div>
+
+  <div id="loading-screen">
+    <div class="pixel-loader"></div>
+  </div>
+
+  <div id="stage-result-popup" style="display: none;">
+    <div class="popup-content toss-style">
+      <h2 id="result-title">STAGE CLEAR!</h2>
+      <p id="result-description" class="result-description"></p>
+      <div id="result-buttons" class="button-group">
+        <!-- Buttons will be dynamically inserted -->
+      </div>
+    </div>
+  </div>
+
+  <canvas id="game-canvas"></canvas>
+  <div id="joystick-container">
+    <div id="joystick-knob"></div>
   </div>
   <div id="bridge-view">
     <div class="content">

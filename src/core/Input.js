@@ -16,7 +16,7 @@ export class Input {
         if (!canvas) return;
 
         canvas.addEventListener('touchstart', (e) => {
-            e.preventDefault();
+            if (e.cancelable) e.preventDefault();
             const touch = e.touches[0];
             this.startPos = { x: touch.clientX, y: touch.clientY };
             this.joystick.active = true;
@@ -24,7 +24,7 @@ export class Input {
         }, { passive: false });
 
         canvas.addEventListener('touchmove', (e) => {
-            e.preventDefault();
+            if (e.cancelable) e.preventDefault();
             if (!this.joystick.active) return;
 
             const touch = e.touches[0];
@@ -33,7 +33,7 @@ export class Input {
         }, { passive: false });
 
         canvas.addEventListener('touchend', (e) => {
-            e.preventDefault();
+            if (e.cancelable) e.preventDefault();
             this.joystick = { x: 0, y: 0, active: false };
             this.hideJoystick();
         });

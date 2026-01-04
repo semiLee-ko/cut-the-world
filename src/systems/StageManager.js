@@ -2,7 +2,7 @@ export class StageManager {
     constructor() {
         this.currentStage = 1;
         this.stages = [
-            {
+            /*{
                 level: 1,
                 theme: 'forest',
                 mapSize: 0.8,
@@ -49,7 +49,7 @@ export class StageManager {
                 mapSize: 1.2,
                 timeLimit: 90,
                 boss: true,
-                description: '첫 보스 스테이지! 용암 지역의 보스를 물리치세요!',
+                description: '첫 보스 스테이지! 용암 지역의 보스를 물리치세요! 보스는 스킬을 사용합니다!',
                 monsters: [
                     { count: 3 }
                 ]
@@ -74,7 +74,7 @@ export class StageManager {
                 timeLimit: 100,
                 scale: 1.1,
                 effects: { type: 'dark_fog' },
-                description: '어둠의 안개가 시야를 가립니다. 집중하세요!',
+                description: '어둠의 안개가 시야를 가립니다. 집중하세요!<br/>안개가 시야를 가리면 이동속도가 감소됩니다.',
                 monsters: [
                     { count: 5 }
                 ]
@@ -90,7 +90,7 @@ export class StageManager {
                 monsters: [
                     { count: 5 }
                 ]
-            },
+            },*/
             {
                 level: 9,
                 theme: 'space',

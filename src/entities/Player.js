@@ -25,11 +25,15 @@ export class Player {
 
         let currentSpeed = this.speed;
 
+        let slideY = 0;
+
         // Apply Ice Effects
         if (effects && effects.type === 'ice') {
             // 1. Passive Slide (1px/sec downwards when idle)
             if (inputVector.x === 0 && inputVector.y === 0) {
-                this.y += (1 * dt / 1000);
+                slideY = (10 * dt / 1000); // Changed from 1 to 10 based on user's feedback ("falling little by little" implies visibility)
+                // 1px/sec is too slow to notice typically, 10px/sec is slow but visible.
+                // And fixes the trail issue because dist > 0.
             }
 
             // 2. Speed Modifiers
@@ -64,10 +68,10 @@ export class Player {
             currentSpeed *= 0.8; // 20% speed reduction
         }
 
-        if (inputVector.x === 0 && inputVector.y === 0 && (!effects || effects.type !== 'ice')) return 'IDLE';
+        if (inputVector.x === 0 && inputVector.y === 0 && slideY === 0) return 'IDLE';
 
         const nextX = this.x + inputVector.x * currentSpeed;
-        const nextY = this.y + inputVector.y * currentSpeed;
+        const nextY = this.y + inputVector.y * currentSpeed + slideY;
 
         if (nextX < 0 || nextX > mapSystem.width || nextY < 0 || nextY > mapSystem.height) {
             return 'BLOCKED';
@@ -82,6 +86,56 @@ export class Player {
 
         if (this.isDrawing) {
             if (nextCell === CONSTANTS.CELL_TYPE.OWNED) {
+                // IMPORTANT: We must fill the gap between current pos and the owned cell!
+                // Otherwise fast movement leaves a gap at the very end, preventing capture.
+
+                const dictX = nextX - this.x;
+                const dictY = nextY - this.y;
+                const dist = Math.hypot(dictX, dictY);
+                const steps = Math.ceil(dist);
+
+                let prevGx = Math.floor(this.x / CONSTANTS.GRID_SIZE);
+                let prevGy = Math.floor(this.y / CONSTANTS.GRID_SIZE);
+
+                for (let i = 1; i <= steps; i++) {
+                    const t = i / steps;
+                    const tx = this.x + dictX * t;
+                    const ty = this.y + dictY * t;
+
+                    const currGx = Math.floor(tx / CONSTANTS.GRID_SIZE);
+                    const currGy = Math.floor(ty / CONSTANTS.GRID_SIZE);
+
+                    // Stop if we actually hit the owned cell logic? 
+                    // No, we want to draw the trail UP TO the owned cell.
+                    // But if we overwrite OWNED into TRAIL it might be weird?
+                    // MapSystem handles it. The crucial part is connectivity.
+
+                    // Actually, if we hit OWNED, we should conceptually stop AT the border.
+                    // But drawing a few pixels properly into the OWNED area ensures overlap/connection.
+
+                    // 4-connectivity fix for the closing segment
+                    if (currGx !== prevGx && currGy !== prevGy) {
+                        const cornerX = currGx * CONSTANTS.GRID_SIZE;
+                        const cornerY = prevGy * CONSTANTS.GRID_SIZE;
+                        mapSystem.setCell(cornerX, cornerY, CONSTANTS.CELL_TYPE.TRAIL);
+                        this.trail.push({ x: cornerX, y: cornerY });
+                    }
+
+                    // Only add if it's NOT already owned?
+                    // If we set OWNED to TRAIL, we might break the wall?
+                    // No, TRAIL type is just temporary.
+                    // But wait, if we overwrite OWNED with TRAIL, mapSystem might get confused?
+                    // mapSystem.fillAreas converts TRAIL -> OWNED anyway.
+                    // So it is safe to overwrite for a frame.
+
+                    // However, we only need to bridge the gap.
+                    mapSystem.setCell(tx, ty, CONSTANTS.CELL_TYPE.TRAIL);
+                    this.trail.push({ x: tx, y: ty });
+
+                    prevGx = currGx;
+                    prevGy = currGy;
+                }
+
                 this.isDrawing = false;
                 this.x = nextX;
                 this.y = nextY;
@@ -101,26 +155,35 @@ export class Player {
                 const dist = Math.hypot(dictX, dictY);
                 const steps = Math.ceil(dist); // Ensure we hit every pixel
 
+                let prevGx = Math.floor(this.x / CONSTANTS.GRID_SIZE);
+                let prevGy = Math.floor(this.y / CONSTANTS.GRID_SIZE);
+
                 for (let i = 1; i <= steps; i++) {
                     const t = i / steps;
                     const tx = this.x + dictX * t;
                     const ty = this.y + dictY * t;
 
-                    // Avoid adding duplicate points if they map to same grid cell? 
-                    // MapSystem.setCell handles coords.
-                    // Just pushing to trail and setting cell is enough.
-                    // Note: setCell handles grid mapping. 
+                    const currGx = Math.floor(tx / CONSTANTS.GRID_SIZE);
+                    const currGy = Math.floor(ty / CONSTANTS.GRID_SIZE);
+
+                    // Check for diagonal break (4-connectivity fix)
+                    if (currGx !== prevGx && currGy !== prevGy) {
+                        // Insert corner point (using currGx, prevGy)
+                        const cornerX = currGx * CONSTANTS.GRID_SIZE;
+                        const cornerY = prevGy * CONSTANTS.GRID_SIZE;
+
+                        mapSystem.setCell(cornerX, cornerY, CONSTANTS.CELL_TYPE.TRAIL);
+                        this.trail.push({ x: cornerX, y: cornerY });
+                    }
 
                     mapSystem.setCell(tx, ty, CONSTANTS.CELL_TYPE.TRAIL);
 
                     // Optimize trail array: only push if different from last? 
                     // For now, simple push is safer for continuity.
-                    // But we should check if we already pushed this exact pixel to avoid bloating trail array.
-                    // With GRID_SIZE 1, it matches pixels.
-
-                    // Let's just push significant changes or all?
-                    // Pushing all might be heavy if steps are huge, but here steps ~ 1 or 2.
                     this.trail.push({ x: tx, y: ty });
+
+                    prevGx = currGx;
+                    prevGy = currGy;
                 }
             }
         }
